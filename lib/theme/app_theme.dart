@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 class AppTheme {
   // Color Palette
   static const Color slate50 = Color(0xFFf8fafc);
+  static const Color slate100 = Color(0xFFf1f5f9);
   static const Color slate200 = Color(0xFFe2e8f0);
+  static const Color slate300 = Color(0xFFcbd5e1);
   static const Color slate500 = Color(0xFF64748b);
   static const Color slate600 = Color(0xFF475569);
   static const Color slate900 = Color(0xFF0f172a);

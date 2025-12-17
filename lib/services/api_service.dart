@@ -169,8 +169,7 @@ class TextAnalysisResult {
       detectedWords: wordsList,
       wordCount: json['word_count'] ?? 0,
       criticalCount: json['critical_count'] ?? 0,
-      warningCount: jsg baseUrl = 'https://geminiai340--eveguard-backend-fastapi-app.modal.run';
-  on['warning_count'] ?? 0,
+      warningCount: json['warning_count'] ?? 0,
       suspiciousCount: json['suspicious_count'] ?? 0,
     );
   }
