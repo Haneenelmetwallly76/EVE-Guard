@@ -1,8 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
+import '../services/api_service.dart';
 
 class AIAnalysisScreen extends StatefulWidget {
   const AIAnalysisScreen({super.key});
@@ -13,9 +12,9 @@ class AIAnalysisScreen extends StatefulWidget {
 
 class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
   final TextEditingController _textController = TextEditingController();
-  String? _analysisResult;
+  TextAnalysisResult? _analysisResult;
   bool _isLoading = false;
-  String? _riskLevel; // 'safe', 'warning', 'danger'
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -35,55 +34,31 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
     setState(() {
       _isLoading = true;
       _analysisResult = null;
-      _riskLevel = null;
+      _errorMessage = null;
     });
 
     try {
-      final uri = Uri.parse('http://10.20.0.97:8000/analyze-text');
-      final body = json.encode({'text': textValue});
-
-      final response = await http
-          .post(uri, headers: {'Content-Type': 'application/json'}, body: body)
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        final String risk = (data['risk'] ?? 'safe').toString();
-        final String message = (data['message'] ?? 'No message').toString();
-
-        setState(() {
-          _riskLevel = risk;
-          _analysisResult = message;
-        });
-      } else {
-        setState(() {
-          _analysisResult = 'Server error: ${response.statusCode}';
-          _riskLevel = 'error';
-        });
-      }
-    } on http.ClientException catch (e) {
+      final result = await ApiService.analyzeText(textValue);
       setState(() {
-        _analysisResult = 'Network error: ${e.message}';
-        _riskLevel = 'error';
+        _analysisResult = result;
+        _isLoading = false;
       });
-    } on Exception catch (e) {
+    } catch (e) {
       setState(() {
-        _analysisResult = 'Error: $e';
-        _riskLevel = 'error';
-      });
-    } finally {
-      setState(() {
+        _errorMessage = e.toString();
         _isLoading = false;
       });
     }
   }
 
-  Color _getRiskColor() {
-    switch (_riskLevel) {
+  Color _getRiskColor(String? risk) {
+    switch (risk) {
       case 'safe':
         return AppTheme.emerald500;
-      case 'warning':
+      case 'suspicious':
         return AppTheme.yellow600;
+      case 'warning':
+        return Colors.orange;
       case 'danger':
         return AppTheme.red600;
       default:
@@ -91,16 +66,33 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
     }
   }
 
-  String _getRiskLabel() {
-    switch (_riskLevel) {
+  String _getRiskLabel(String? risk) {
+    switch (risk) {
       case 'safe':
         return 'Safe';
+      case 'suspicious':
+        return 'Suspicious';
       case 'warning':
         return 'Warning';
       case 'danger':
         return 'Danger';
       default:
         return 'Pending';
+    }
+  }
+
+  IconData _getRiskIcon(String? risk) {
+    switch (risk) {
+      case 'safe':
+        return Icons.check_circle;
+      case 'suspicious':
+        return Icons.info;
+      case 'warning':
+        return Icons.warning;
+      case 'danger':
+        return Icons.error;
+      default:
+        return Icons.help;
     }
   }
 
@@ -233,29 +225,49 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
           ),
           const SizedBox(height: 24),
 
+          // Error Message
+          if (_errorMessage != null)
+            GlassCard(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.red600.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.red600.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: AppTheme.red600),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(color: AppTheme.red600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // Result Section
           if (_analysisResult != null)
             GlassCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Risk Level Header
                   Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: _getRiskColor().withOpacity(0.2),
+                          color: _getRiskColor(_analysisResult!.risk).withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
-                          _riskLevel == 'safe'
-                              ? Icons.check_circle
-                              : _riskLevel == 'warning'
-                                  ? Icons.warning
-                                  : _riskLevel == 'danger'
-                                      ? Icons.error
-                                      : Icons.info,
-                          color: _getRiskColor(),
+                          _getRiskIcon(_analysisResult!.risk),
+                          color: _getRiskColor(_analysisResult!.risk),
                           size: 24,
                         ),
                       ),
@@ -275,13 +287,13 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
                                 vertical: 6,
                               ),
                               decoration: BoxDecoration(
-                                color: _getRiskColor().withOpacity(0.2),
+                                color: _getRiskColor(_analysisResult!.risk).withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                _getRiskLabel(),
+                                _getRiskLabel(_analysisResult!.risk),
                                 style: TextStyle(
-                                  color: _getRiskColor(),
+                                  color: _getRiskColor(_analysisResult!.risk),
                                   fontWeight: FontWeight.w600,
                                   fontSize: 14,
                                 ),
@@ -293,28 +305,135 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
+                  
+                  // Danger Score
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Danger Score', style: AppTheme.labelMedium),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: _analysisResult!.dangerScore,
+                          minHeight: 12,
+                          backgroundColor: AppTheme.slate200,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            _getRiskColor(_analysisResult!.risk),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${(_analysisResult!.dangerScore * 100).toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: _getRiskColor(_analysisResult!.risk),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Message
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: _getRiskColor().withOpacity(0.1),
+                      color: _getRiskColor(_analysisResult!.risk).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: _getRiskColor().withOpacity(0.3),
+                        color: _getRiskColor(_analysisResult!.risk).withOpacity(0.3),
                       ),
                     ),
                     child: Text(
-                      _analysisResult!,
+                      _analysisResult!.message,
                       style: AppTheme.bodyMedium.copyWith(
                         color: AppTheme.slate900,
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Detected Words
+                  if (_analysisResult!.detectedWords.isNotEmpty) ...[
+                    const Text('Detected Threat Words', style: AppTheme.labelMedium),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _analysisResult!.detectedWords.map((word) {
+                        final wordRisk = word.level == 'critical' ? 'danger' :
+                                         word.level == 'warning' ? 'warning' : 'suspicious';
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _getRiskColor(wordRisk).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: _getRiskColor(wordRisk)),
+                          ),
+                          child: Text(
+                            '${word.word} (${word.level})',
+                            style: TextStyle(
+                              color: _getRiskColor(wordRisk),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  
+                  // Word Counts
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildCountBadge('Critical', _analysisResult!.criticalCount, AppTheme.red600),
+                      _buildCountBadge('Warning', _analysisResult!.warningCount, Colors.orange),
+                      _buildCountBadge('Suspicious', _analysisResult!.suspiciousCount, AppTheme.yellow600),
+                    ],
                   ),
                 ],
               ),
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCountBadge(String label, int count, Color color) {
+    return Column(
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.2),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              count.toString(),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: color,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }
