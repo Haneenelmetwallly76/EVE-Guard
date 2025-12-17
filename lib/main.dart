@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/signup_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/monitoring_screen.dart';
 import 'screens/ai_analysis_screen.dart';
 import 'screens/report_screen.dart';
 import 'screens/map_screen.dart';
@@ -49,7 +48,7 @@ class _MainAppState extends State<MainApp> {
   String _authMode = 'login'; // 'login' or 'signup'
   String _activeScreen = 'home';
   bool _showNotifications = false;
-  bool _hasUnreadNotifications = true;
+  final bool _hasUnreadNotifications = true;
   User? _user;
 
   void _handleLogin(String email, String password) {
@@ -81,8 +80,6 @@ class _MainAppState extends State<MainApp> {
     switch (_activeScreen) {
       case 'home':
         return HomeScreen(user: _user);
-      case 'monitoring':
-        return const MonitoringScreen();
       case 'ai':
         return const AIAnalysisScreen();
       case 'report':

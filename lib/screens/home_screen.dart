@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../models/user.dart';
 import '../widgets/glass_card.dart';
-import '../widgets/status_badge.dart';
 import '../widgets/device_status_card.dart';
 import '../widgets/sos_button.dart';
 

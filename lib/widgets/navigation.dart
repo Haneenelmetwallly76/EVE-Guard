@@ -43,14 +43,9 @@ class Navigation extends StatelessWidget {
                 label: 'Home',
               ),
               _buildNavItem(
-                screen: 'monitoring',
-                icon: Icons.visibility,
-                label: 'Monitor',
-              ),
-              _buildNavItem(
                 screen: 'ai',
                 icon: Icons.psychology,
-                label: 'AI',
+                label: 'Test',
               ),
               _buildNavItem(
                 screen: 'report',
