@@ -8,6 +8,7 @@ import 'screens/report_screen.dart';
 import 'screens/map_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/record_screen.dart';
 import 'widgets/navigation.dart';
 import 'widgets/notification_modal.dart';
 import 'theme/app_theme.dart';
@@ -44,12 +45,12 @@ class MainApp extends StatefulWidget {
 }
 
 class _MainAppState extends State<MainApp> {
-  bool _isAuthenticated = false;
+  bool _isAuthenticated = true; // DEBUG: start authenticated to show main UI
   String _authMode = 'login'; // 'login' or 'signup'
-  String _activeScreen = 'home';
+  String _activeScreen = 'record'; // DEBUG: open Record screen on start
   bool _showNotifications = false;
   final bool _hasUnreadNotifications = true;
-  User? _user;
+  User? _user = User(email: 'dev@example.com', name: 'Dev User'); // DEBUG user
 
   void _handleLogin(String email, String password) {
     setState(() {
@@ -82,6 +83,8 @@ class _MainAppState extends State<MainApp> {
         return HomeScreen(user: _user);
       case 'ai':
         return const AIAnalysisScreen();
+      case 'record':
+        return const RecordScreen();
       case 'report':
         return const ReportScreen();
       case 'map':
