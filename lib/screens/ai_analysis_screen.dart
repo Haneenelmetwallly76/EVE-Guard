@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../services/api_service.dart';
+import 'package:path_provider/path_provider.dart';
 
 class AIAnalysisScreen extends StatefulWidget {
   const AIAnalysisScreen({super.key});
@@ -16,9 +18,17 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  // Recording (simulated) state
+  bool _isRecording = false;
+  bool _isAnalyzingAudio = false;
+  TranscriptionResult? _audioAnalysisResult;
+  Timer? _recordingTimer;
+  int _recordingSeconds = 0;
+
   @override
   void dispose() {
     _textController.dispose();
+    _recordingTimer?.cancel();
     super.dispose();
   }
 
@@ -49,6 +59,70 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  void _startRecording() {
+    setState(() {
+      _isRecording = true;
+      _recordingSeconds = 0;
+      _audioAnalysisResult = null;
+      _errorMessage = null;
+    });
+
+    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        _recordingSeconds++;
+      });
+    });
+  }
+
+  void _stopRecording() {
+    _recordingTimer?.cancel();
+    setState(() {
+      _isRecording = false;
+    });
+  }
+
+  Future<void> _analyzeRecording() async {
+    setState(() {
+      _isAnalyzingAudio = true;
+      _audioAnalysisResult = null;
+      _errorMessage = null;
+    });
+
+    // Simulate saving to a temp path and performing analysis
+    await getTemporaryDirectory();
+
+    try {
+      await Future.delayed(const Duration(seconds: 1));
+      _audioAnalysisResult = TranscriptionResult(
+        transcription: 'Simulated transcription of recorded audio.',
+        audioBase64: '',
+        audioFormat: 'wav',
+        analysis: AnalysisResult(
+          detectedWords: [],
+          dangerScore: 0.0,
+          risk: 'safe',
+          message: '',
+          wordCount: 0,
+          criticalCount: 0,
+          warningCount: 0,
+          suspiciousCount: 0,
+        ),
+      );
+    } catch (e) {
+      _errorMessage = 'Audio analysis failed: $e';
+    } finally {
+      setState(() {
+        _isAnalyzingAudio = false;
+      });
+    }
+  }
+
+  String _formatDuration(int seconds) {
+    final mins = seconds ~/ 60;
+    final secs = seconds % 60;
+    return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
   Color _getRiskColor(String? risk) {
@@ -146,6 +220,120 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
           ),
           const SizedBox(height: 24),
 
+          // Voice Analysis (merged record UI)
+          GlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Text('Voice Analysis', style: AppTheme.headingSmall),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: _isAnalyzingAudio
+                      ? null
+                      : () {
+                          if (_isRecording) {
+                            _stopRecording();
+                          } else {
+                            _startRecording();
+                          }
+                        },
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isRecording ? AppTheme.red600.withOpacity(0.15) : AppTheme.slate100,
+                      border: Border.all(
+                        color: _isRecording ? AppTheme.red600 : AppTheme.slate300,
+                        width: 3,
+                      ),
+                    ),
+                    child: Icon(
+                      _isRecording ? Icons.stop : Icons.mic,
+                      size: 48,
+                      color: _isRecording ? AppTheme.red600 : AppTheme.slate600,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (_isRecording)
+                  Text(
+                    _formatDuration(_recordingSeconds),
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                if (!_isRecording && _recordingSeconds > 0)
+                  Text(
+                    'Recording: ${_formatDuration(_recordingSeconds)}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.slate600,
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                if (!_isRecording && _recordingSeconds > 0)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isAnalyzingAudio ? null : _analyzeRecording,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.emerald500,
+                        disabledBackgroundColor: AppTheme.slate500,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _isAnalyzingAudio
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Analyze Record',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                  ),
+                if (_recordingSeconds > 0)
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _recordingSeconds = 0;
+                          _audioAnalysisResult = null;
+                        });
+                      },
+                      child: const Text('Clear'),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                if (_audioAnalysisResult != null)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Transcription', style: AppTheme.labelMedium),
+                      const SizedBox(height: 8),
+                      Text(_audioAnalysisResult!.transcription),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
           // Input Section
           GlassCard(
             child: Column(
@@ -223,6 +411,7 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
               ],
             ),
           ),
+
           const SizedBox(height: 24),
 
           // Error Message
@@ -437,3 +626,4 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
     );
   }
 }
+

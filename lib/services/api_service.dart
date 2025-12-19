@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 
-/// API Service for EVE-Guard backend
+/// API Service for The Guard backend
 class ApiService {
   // Modal deployment endpoint - UPDATE THIS AFTER DEPLOYMENT
-  static const String baseUrl = 'https://geminiai340--eveguard-backend-fastapi-app.modal.run';
+  static const String baseUrl = 'https://modal.com/apps/yousef-ahmed9904/main/deployed/eveguard-backend';
   
   /// Transcribe audio and analyze for threats
   /// Returns full analysis including transcription, danger score, and detected words

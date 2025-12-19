@@ -3,7 +3,8 @@ import '../theme/app_theme.dart';
 import '../models/user.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/device_status_card.dart';
-import '../widgets/sos_button.dart';
+import '../widgets/heart_rate_card.dart';
+import '../screens/gps_map_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final User? user;
@@ -122,53 +123,96 @@ class _HomeScreenState extends State<HomeScreen>
 
           const SizedBox(height: 24),
 
-          // SOS Section
+          // GPS Location Map Section
           GlassCard(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Emergency SOS',
+                  'Live GPS Location',
                   style: AppTheme.headingMedium,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Press and hold for 3 seconds to activate emergency protocol',
+                  'View your real-time location on map',
                   style: AppTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 24),
-                Center(
-                  child: SOSButton(
-                    onPressed: () {
-                      _showSOSConfirmation();
-                    },
-                  ),
-                ),
                 const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.blue50.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.info_outline,
-                        color: AppTheme.blue600,
-                        size: 16,
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const GPSMapScreen(),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Emergency contacts and authorities will be notified immediately',
-                          style: AppTheme.bodySmall.copyWith(
-                            color: AppTheme.blue600,
+                    );
+                  },
+                  child: Container(
+                    height: 250,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0xFF34C759),
+                          Color(0xFF00A86B),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Stack(
+                      children: [
+                        // Map background pattern
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.location_on,
+                                size: 64,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Open Full Map',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Tap to view your location',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    ],
+                        // Tap indicator
+                        Positioned(
+                          bottom: 12,
+                          right: 12,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.arrow_forward,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -177,34 +221,35 @@ class _HomeScreenState extends State<HomeScreen>
 
           const SizedBox(height: 24),
 
-          // Device Status Section
-          const Text(
-            'Connected Devices',
-            style: AppTheme.headingMedium,
+          // SOS Section
+          GlassCard(
+            child: Column(
+              children: [
+                const Text(
+                  'Device Status',
+                  style: AppTheme.headingMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+
+          const SizedBox(height: 12),
+
+          // Device Status Section - The Guard Wearable
           const DeviceStatusCard(
-            deviceName: 'EVE Wearable',
+            deviceName: 'The Guard Wearable',
             deviceType: 'Smart Watch',
             isConnected: true,
             batteryLevel: 85,
             lastSync: '2 min ago',
           ),
+
           const SizedBox(height: 12),
-          const DeviceStatusCard(
-            deviceName: 'Home Camera',
-            deviceType: 'Security Camera',
-            isConnected: true,
-            lastSync: 'Live',
-          ),
-          const SizedBox(height: 12),
-          const DeviceStatusCard(
-            deviceName: 'Mobile Sensor',
-            deviceType: 'Phone',
-            isConnected: true,
-            batteryLevel: 67,
-            lastSync: 'Now',
-          ),
+
+          // Heart Rate Pulse Sensor
+          const HeartRateCard(),
 
           const SizedBox(height: 24),
 
@@ -223,30 +268,9 @@ class _HomeScreenState extends State<HomeScreen>
                   subtitle: 'View cameras',
                   color: AppTheme.indigo600,
                   backgroundColor: AppTheme.indigo50,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildQuickActionCard(
-                  icon: Icons.analytics,
-                  title: 'AI Analysis',
-                  subtitle: 'Behavior insights',
-                  color: AppTheme.blue600,
-                  backgroundColor: AppTheme.blue50,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildQuickActionCard(
-                  icon: Icons.report,
-                  title: 'Report Incident',
-                  subtitle: 'File a report',
-                  color: AppTheme.yellow600,
-                  backgroundColor: AppTheme.orange50,
+                  onTap: () {
+                    Navigator.pushNamed(context, 'camera');
+                  },
                 ),
               ),
               const SizedBox(width: 12),
@@ -257,6 +281,11 @@ class _HomeScreenState extends State<HomeScreen>
                   subtitle: 'Manage areas',
                   color: AppTheme.emerald600,
                   backgroundColor: AppTheme.emerald50,
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Safe Zones - Locations coming soon')),
+                    );
+                  },
                 ),
               ),
             ],
@@ -310,12 +339,12 @@ class _HomeScreenState extends State<HomeScreen>
     required String subtitle,
     required Color color,
     required Color backgroundColor,
+    VoidCallback? onTap,
   }) {
     return GestureDetector(
-      onTap: () {
-        // Handle quick action tap
+      onTap: onTap ?? () {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$title feature coming soon')),
+          SnackBar(content: Text('$title feature')),
         );
       },
       child: Container(
@@ -401,68 +430,6 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
       ],
-    );
-  }
-
-  void _showSOSConfirmation() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Row(
-          children: [
-            const Icon(
-              Icons.warning,
-              color: AppTheme.red500,
-              size: 24,
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'Emergency SOS',
-              style: AppTheme.headingMedium,
-            ),
-          ],
-        ),
-        content: const Text(
-          'This will immediately alert your emergency contacts and local authorities. Are you in immediate danger?',
-          style: AppTheme.bodyMedium,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppTheme.slate600),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _activateEmergency();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.red500,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Activate SOS'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _activateEmergency() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Emergency SOS Activated! Authorities have been notified.',
-        ),
-        backgroundColor: AppTheme.red500,
-        duration: Duration(seconds: 3),
-      ),
     );
   }
 }

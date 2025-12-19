@@ -309,7 +309,7 @@ class _RecordScreenState extends State<RecordScreen> with SingleTickerProviderSt
                               )
                             : const Icon(Icons.analytics, color: Colors.white),
                         label: Text(
-                          _isAnalyzing ? 'Analyzing...' : 'Analyze',
+                          _isAnalyzing ? 'Analyzing...' : 'Analyze Record',
                           style: const TextStyle(color: Colors.white),
                         ),
                       ),

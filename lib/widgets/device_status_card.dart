@@ -91,7 +91,7 @@ class DeviceStatusCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                     ],
-                    Icon(
+                    const Icon(
                       Icons.sync,
                       size: 14,
                       color: AppTheme.slate500,

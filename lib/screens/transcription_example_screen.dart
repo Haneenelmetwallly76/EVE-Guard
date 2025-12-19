@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+// Note: `file_picker` removed to avoid platform plugin build issues.
+// This screen provides a simple path-input fallback for selecting a file.
 import '../services/transcription_service.dart';
 
 /// Example screen showing how to use the transcription service
@@ -24,15 +25,35 @@ class _TranscriptionExampleScreenState extends State<TranscriptionExampleScreen>
     });
 
     try {
-      // Pick audio file
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.audio,
-        allowedExtensions: ['ogg', 'mp3', 'wav', 'm4a', 'flac'],
+      // Simple fallback: ask user to enter a local file path to an audio file.
+      String? path = await showDialog<String>(
+        context: context,
+        builder: (context) {
+          final controller = TextEditingController();
+          return AlertDialog(
+            title: const Text('Enter audio file path'),
+            content: TextField(
+              controller: controller,
+              decoration: const InputDecoration(hintText: '/path/to/file.wav'),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('OK')),
+            ],
+          );
+        },
       );
 
-      if (result != null && result.files.single.path != null) {
-        File audioFile = File(result.files.single.path!);
-        
+      if (path != null && path.isNotEmpty) {
+        File audioFile = File(path);
+        if (!await audioFile.exists()) {
+          setState(() {
+            _errorMessage = 'File not found: $path';
+            _isLoading = false;
+          });
+          return;
+        }
+
         // Call transcription service
         String transcription = await TranscriptionService.transcribeAudio(
           audioFile,

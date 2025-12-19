@@ -14,97 +14,69 @@ class Navigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95),
-        border: Border(
-          top: BorderSide(
-            color: AppTheme.slate200.withOpacity(0.5),
-            width: 1,
-          ),
-        ),
+        color: Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
+            blurRadius: 10,
+            offset: const Offset(0, -5),
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem(
-                screen: 'home',
-                icon: Icons.home,
-                label: 'Home',
-              ),
-              _buildNavItem(
-                screen: 'ai',
-                icon: Icons.psychology,
-                label: 'Test',
-              ),
-              _buildNavItem(
-                screen: 'report',
-                icon: Icons.report,
-                label: 'Report',
-              ),
-              _buildNavItem(
-                screen: 'profile',
-                icon: Icons.person,
-                label: 'Profile',
-              ),
-            ],
-          ),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: AppTheme.slate50.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildNavItem(Icons.home_rounded, 'Home', 'home'),
+            _buildNavItem(Icons.analytics_rounded, 'Analysis', 'ai'),
+            _buildNavItem(Icons.videocam_rounded, 'Camera', 'camera'),
+            _buildNavItem(Icons.person_rounded, 'Profile', 'profile'),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildNavItem({
-    required String screen,
-    required IconData icon,
-    required String label,
-  }) {
-    final bool isActive = activeScreen == screen;
-
+  Widget _buildNavItem(IconData icon, String label, String screenName) {
+    final bool isActive = activeScreen == screenName;
+    
     return GestureDetector(
-      onTap: () => onScreenChange(screen),
+      onTap: () => onScreenChange(screenName),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive 
-              ? AppTheme.blue50.withOpacity(0.8)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+        padding: EdgeInsets.symmetric(
+          horizontal: isActive ? 20 : 16,
+          vertical: 10,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        decoration: BoxDecoration(
+          color: isActive ? AppTheme.blue600 : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
           children: [
-            AnimatedScale(
-              scale: isActive ? 1.1 : 1.0,
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                icon,
-                color: isActive ? AppTheme.blue600 : AppTheme.slate500,
-                size: 20,
-              ),
+            Icon(
+              icon,
+              color: isActive ? Colors.white : AppTheme.slate500,
+              size: 24,
             ),
-            const SizedBox(height: 4),
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 200),
-              style: TextStyle(
-                color: isActive ? AppTheme.blue600 : AppTheme.slate500,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+            if (isActive) ...[
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
               ),
-              child: Text(label),
-            ),
+            ],
           ],
         ),
       ),

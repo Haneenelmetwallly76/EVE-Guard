@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'dart:convert';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/signup_screen.dart';
 import 'screens/home_screen.dart';
@@ -8,18 +11,27 @@ import 'screens/report_screen.dart';
 import 'screens/map_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/profile_screen.dart';
-import 'screens/record_screen.dart';
+import 'screens/camera_monitor_screen.dart';
 import 'widgets/navigation.dart';
 import 'widgets/notification_modal.dart';
 import 'theme/app_theme.dart';
 import 'models/user.dart';
 
-void main() {
-  runApp(const EVEGuardApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (_) {
+    // If initialization fails we'll continue running the app locally.
+  }
+
+  runApp(const TheGuardApp());
 }
 
-class EVEGuardApp extends StatelessWidget {
-  const EVEGuardApp({super.key});
+class TheGuardApp extends StatelessWidget {
+  const TheGuardApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +41,7 @@ class EVEGuardApp extends StatelessWidget {
     ));
 
     return MaterialApp(
-      title: 'EVEGuard',
+      title: 'The Guard',
       theme: AppTheme.lightTheme,
       debugShowCheckedModeBanner: false,
       home: const MainApp(),
@@ -45,27 +57,78 @@ class MainApp extends StatefulWidget {
 }
 
 class _MainAppState extends State<MainApp> {
-  bool _isAuthenticated = true; // DEBUG: start authenticated to show main UI
+  bool _isAuthenticated = false;
   String _authMode = 'login'; // 'login' or 'signup'
-  String _activeScreen = 'record'; // DEBUG: open Record screen on start
+  String _activeScreen = 'home';
   bool _showNotifications = false;
   final bool _hasUnreadNotifications = true;
-  User? _user = User(email: 'dev@example.com', name: 'Dev User'); // DEBUG user
+  User? _user;
 
-  void _handleLogin(String email, String password) {
+  void _handleLogin(Map<String, String> payload) {
     setState(() {
-      _user = User(email: email, name: "Sarah Johnson");
+      final email = payload['email'] ?? 'user@example.com';
+      final firstName = payload['firstName'] ?? '';
+      final lastName = payload['lastName'] ?? '';
+      final name = (firstName.isNotEmpty || lastName.isNotEmpty) ? '$firstName $lastName'.trim() : 'User';
+
+      final childrenJson = payload['children'];
+      List<Map<String, String>>? children;
+      int childrenCount = 0;
+      if (childrenJson != null && childrenJson.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(childrenJson);
+          if (decoded is List) {
+            children = decoded.map<Map<String, String>>((e) {
+              return {
+                'id': e['id']?.toString() ?? '',
+                'name': e['name']?.toString() ?? '',
+              };
+            }).toList();
+            childrenCount = children.length;
+          }
+        } catch (_) {
+          // ignore decode errors
+        }
+      }
+
+      // Fallback: if childrenCount provided or children still null
+      final childrenCountStr = payload['childrenCount'] ?? '0';
+      final parsedCount = int.tryParse(childrenCountStr) ?? 0;
+      if (children == null) {
+        childrenCount = parsedCount;
+        children = List<Map<String, String>>.generate(childrenCount, (i) => {
+              'id': 'child_${i + 1}',
+              'name': 'Child ${i + 1}',
+            });
+      }
+
+      _user = User(
+        email: email,
+        name: name,
+        childrenCount: childrenCount,
+        children: children,
+      );
       _isAuthenticated = true;
     });
   }
 
   void _handleSignup(Map<String, String> userData) {
     setState(() {
+      final childrenCountStr = userData['childrenCount'] ?? '0';
+      final int childrenCount = int.tryParse(childrenCountStr) ?? 0;
+      final children = List<Map<String, String>>.generate(childrenCount, (i) => {
+            'id': 'child_${i + 1}',
+            'name': 'Child ${i + 1}',
+          });
+
       _user = User(
         email: userData['email']!,
         name: "${userData['firstName']} ${userData['lastName']}",
+        childrenCount: childrenCount,
+        children: children,
       );
       _isAuthenticated = true;
+      _activeScreen = 'home';
     });
   }
 
@@ -83,8 +146,8 @@ class _MainAppState extends State<MainApp> {
         return HomeScreen(user: _user);
       case 'ai':
         return const AIAnalysisScreen();
-      case 'record':
-        return const RecordScreen();
+      case 'camera':
+        return const CameraMonitorScreen();
       case 'report':
         return const ReportScreen();
       case 'map':
@@ -174,7 +237,7 @@ class _MainAppState extends State<MainApp> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'EVEGuard',
+                                'The Guard',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
                                   color: Color(0xFF0f172a),

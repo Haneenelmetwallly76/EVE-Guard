@@ -1,8 +1,14 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart' as fb_core;
+import 'package:local_auth/local_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
-  final Function(String, String) onLogin;
+  final Function(Map<String, String>) onLogin;
   final VoidCallback onSwitchToSignup;
 
   const LoginScreen({
@@ -18,8 +24,88 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final LocalAuthentication _localAuth = LocalAuthentication();
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _hasBiometrics = false;
+  List<BiometricType> _availableBiometrics = [];
+  bool _hasAccountStored = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometricCapability();
+    _checkStoredAccount();
+  }
+
+  Future<void> _checkBiometricCapability() async {
+    try {
+      _hasBiometrics = await _localAuth.canCheckBiometrics;
+      _availableBiometrics = await _localAuth.getAvailableBiometrics();
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      print('Error checking biometric capability: $e');
+    }
+  }
+
+  Future<void> _checkStoredAccount() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final storedEmail = prefs.getString('stored_email');
+      final storedPassword = prefs.getString('stored_password');
+      if (storedEmail != null && storedPassword != null) {
+        _hasAccountStored = true;
+        _emailController.text = storedEmail;
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    } catch (e) {
+      print('Error checking stored account: $e');
+    }
+  }
+
+  Future<void> _handleBiometricLogin() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final storedEmail = prefs.getString('stored_email');
+      final storedPassword = prefs.getString('stored_password');
+
+      if (storedEmail == null || storedPassword == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No account saved. Please sign up and enable biometric login first.'),
+              backgroundColor: AppTheme.red500,
+            ),
+          );
+        }
+        return;
+      }
+
+      final authenticated = await _localAuth.authenticate(
+        localizedReason: 'Authenticate to access The Guard',
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: true,
+        ),
+      );
+
+      if (!authenticated) return;
+
+      _emailController.text = storedEmail;
+      _passwordController.text = storedPassword;
+      await _performLogin(storedEmail, storedPassword);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Biometric authentication failed: $e')),
+        );
+      }
+    }
+  }
 
   Future<void> _handleLogin() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -31,15 +117,120 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       return;
     }
+    await _performLogin(_emailController.text, _passwordController.text);
+  }
 
+  Future<void> _performLogin(String email, String password) async {
     setState(() => _isLoading = true);
 
-    // Simulate API call delay
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      // If Firebase isn't initialized, fallback to a local simulation and inform the user.
+      if (fb_core.Firebase.apps.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Firebase is not configured. Signed in locally. To enable cloud persistence, add Firebase configuration (google-services.json / GoogleService-Info.plist) or run `flutterfire configure`.',
+            ),
+          ),
+        );
 
-    widget.onLogin(_emailController.text, _passwordController.text);
-    
-    setState(() => _isLoading = false);
+        if (!mounted) return;
+        widget.onLogin({
+          'email': email.trim(),
+          'uid': '',
+        });
+        // Store credentials for biometric login
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('stored_email', email.trim());
+        await prefs.setString('stored_password', password);
+        return;
+      }
+
+      final cred = await fb_auth.FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      final user = cred.user;
+      Map<String, String> payload = {
+        'email': email.trim(),
+        'uid': user?.uid ?? '',
+      };
+
+      // try to fetch Firestore user doc
+      if (user != null) {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          final data = doc.data()!;
+          payload['firstName'] = (data['firstName'] ?? '').toString();
+          payload['lastName'] = (data['lastName'] ?? '').toString();
+          payload['childrenCount'] = (data['childrenCount'] ?? 0).toString();
+          // encode children array as JSON string to pass through map
+          try {
+            payload['children'] = jsonEncode(data['children'] ?? []);
+          } catch (_) {}
+        }
+      }
+
+      if (!mounted) return;
+      widget.onLogin(payload);
+      
+      // Store credentials for biometric login
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('stored_email', email.trim());
+      await prefs.setString('stored_password', password);
+    } on fb_auth.FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account not found. Please sign up first.'),
+            backgroundColor: AppTheme.red500,
+          ),
+        );
+      } else if (e.code == 'wrong-password') {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid email or password.'),
+            backgroundColor: AppTheme.red500,
+          ),
+        );
+      } else if (e.code.contains('configuration') || 
+          e.message?.contains('CONFIGURATION_NOT_FOUND') == true ||
+          e.message?.contains('Google Play Services') == true) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Firebase services not available. Signed in locally. Install Google Play Services on device or check Firebase configuration.',
+            ),
+            duration: Duration(seconds: 4),
+          ),
+        );
+        if (!mounted) return;
+        widget.onLogin({
+          'email': email.trim(),
+          'uid': '',
+        });
+        // Store credentials for biometric login
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('stored_email', email.trim());
+        await prefs.setString('stored_password', password);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sign in failed: ${e.message}')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sign in failed: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -48,12 +239,13 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Container(
         decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                 // Logo Section
                 Column(
                   children: [
@@ -72,7 +264,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 24),
                     const Text(
-                      'Welcome to EVEGuard',
+                      'Welcome to The Guard',
                       style: AppTheme.headingLarge,
                       textAlign: TextAlign.center,
                     ),
@@ -144,7 +336,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ElevatedButton(
                         onPressed: _isLoading ? null : _handleLogin,
                         style: AppTheme.primaryButtonStyle.copyWith(
-                          minimumSize: MaterialStateProperty.all(
+                          minimumSize: WidgetStateProperty.all(
                             const Size(double.infinity, 48),
                           ),
                         ),
@@ -161,6 +353,32 @@ class _LoginScreenState extends State<LoginScreen> {
                               )
                             : const Text('Sign In'),
                       ),
+                      
+                      // Biometric Login Button
+                      if (_hasAccountStored && _hasBiometrics && _availableBiometrics.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: OutlinedButton.icon(
+                            onPressed: _isLoading ? null : _handleBiometricLogin,
+                            icon: Icon(
+                              _availableBiometrics.contains(BiometricType.fingerprint)
+                                  ? Icons.fingerprint
+                                  : Icons.face,
+                              color: AppTheme.blue600,
+                            ),
+                            label: Text(
+                              _availableBiometrics.contains(BiometricType.fingerprint)
+                                  ? 'Login with Fingerprint'
+                                  : 'Login with Face ID',
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.blue600,
+                              side: const BorderSide(color: AppTheme.blue600),
+                              minimumSize: const Size(double.infinity, 48),
+                            ),
+                          ),
+                        ),
+                      
                       const SizedBox(height: 16),
                       
                       // Forgot Password Link
@@ -254,6 +472,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ],
+            ),
             ),
           ),
         ),

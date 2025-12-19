@@ -24,7 +24,7 @@ class ReportScreen extends StatelessWidget {
                         color: AppTheme.yellow600.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.report,
                         color: AppTheme.yellow600,
                         size: 24,

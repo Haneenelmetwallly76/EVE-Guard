@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "947349636370",
+    "project_id": "balanced-meal-8cfaf",
+    "storage_bucket": "balanced-meal-8cfaf.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:947349636370:android:efb73860f35bbe00015fcb",
+        "android_client_info": {
+          "package_name": "com.example.eve_guard"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCyzY550Eb35Fu-RduwxsRzkCDDgCJWPOs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

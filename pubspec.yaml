@@ -1,4 +1,4 @@
-name: eveguard
+name: the_guard
 description: A sophisticated anti-harassment mobile application with AI-powered threat detection and emergency response capabilities.
 
 publish_to: 'none'
@@ -14,7 +14,15 @@ dependencies:
   cupertino_icons: ^1.0.2
   http: ^1.2.0
   path_provider: ^2.0.13
-  file_picker: ^5.2.5
+  permission_handler: ^11.3.0
+  firebase_core: ^2.14.0
+  firebase_auth: ^4.6.0
+  cloud_firestore: ^4.10.0
+  video_player: ^2.8.0
+  geolocator: ^10.1.0
+  google_maps_flutter: ^2.5.3
+  local_auth: ^2.3.0
+  shared_preferences: ^2.2.0
 
 dev_dependencies:
   flutter_test:

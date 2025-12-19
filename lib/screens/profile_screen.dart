@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../models/user.dart';
 import '../widgets/glass_card.dart';
+import 'child_dashboard.dart';
 
 class ProfileScreen extends StatelessWidget {
   final VoidCallback onLogout;
@@ -96,6 +97,32 @@ class ProfileScreen extends StatelessWidget {
 
           const SizedBox(height: 24),
 
+          // Children section
+          if (user?.children != null && user!.children!.isNotEmpty) ...[
+            const Text(
+              'Children',
+              style: AppTheme.headingMedium,
+            ),
+            const SizedBox(height: 12),
+            Column(
+              children: user!.children!.map((child) {
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.child_care_outlined, color: AppTheme.slate600),
+                  title: Text(child['name'] ?? 'Child'),
+                  trailing: const Icon(Icons.chevron_right, color: AppTheme.slate500),
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => ChildDashboard(child: child),
+                    ));
+                  },
+                );
+              }).toList(),
+            ),
+
+            const SizedBox(height: 24),
+          ],
+
           // Settings Section
           const Text(
             'Settings',
@@ -140,7 +167,7 @@ class ProfileScreen extends StatelessWidget {
                 _buildSettingsItem(
                   icon: Icons.devices,
                   title: 'Connected Devices',
-                  subtitle: 'Manage your EVEGuard devices',
+                  subtitle: 'Manage your The Guard devices',
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Connected Devices screen')),
@@ -186,7 +213,7 @@ class ProfileScreen extends StatelessWidget {
           // App Version
           Center(
             child: Text(
-              'EVEGuard v1.0.0',
+              'The Guard v1.0.0',
               style: AppTheme.bodySmall.copyWith(
                 color: AppTheme.slate500,
               ),
@@ -274,7 +301,7 @@ class ProfileScreen extends StatelessWidget {
           style: AppTheme.headingMedium,
         ),
         content: const Text(
-          'Are you sure you want to sign out? You will need to sign in again to access your EVEGuard protection.',
+          'Are you sure you want to sign out? You will need to sign in again to access your The Guard protection.',
           style: AppTheme.bodyMedium,
         ),
         actions: [

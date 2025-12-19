@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart' as fb_core;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -21,6 +25,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _childrenController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
@@ -63,65 +68,156 @@ class _SignupScreenState extends State<SignupScreen> {
 
     setState(() => _isLoading = true);
 
-    // Simulate API call delay
-    await Future.delayed(const Duration(seconds: 1));
+    // If Firebase is not configured, fall back to a local simulation and inform the user.
+    if (fb_core.Firebase.apps.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Firebase is not configured. Signed up locally. To enable cloud persistence, add Firebase configuration (google-services.json / GoogleService-Info.plist) or run `flutterfire configure`.',
+          ),
+        ),
+      );
 
-    widget.onSignup({
-      'firstName': _firstNameController.text,
-      'lastName': _lastNameController.text,
-      'email': _emailController.text,
-      'password': _passwordController.text,
-    });
-    
-    setState(() => _isLoading = false);
+      if (!mounted) return;
+      widget.onSignup({
+        'firstName': _firstNameController.text.trim(),
+        'lastName': _lastNameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'password': _passwordController.text,
+        'childrenCount': _childrenController.text.trim(),
+        'uid': '',
+      });
+      // Store credentials for biometric login
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('stored_email', _emailController.text.trim());
+      await prefs.setString('stored_password', _passwordController.text);
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      final cred = await fb_auth.FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      final user = cred.user;
+      final childrenCount = int.tryParse(_childrenController.text.trim()) ?? 0;
+      final children = List<Map<String, String>>.generate(childrenCount, (i) => {
+            'id': 'child_${i + 1}',
+            'name': 'Child ${i + 1}',
+          });
+
+      if (user != null) {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'firstName': _firstNameController.text.trim(),
+          'lastName': _firstNameController.text.trim(),
+          'email': _emailController.text.trim(),
+          'childrenCount': childrenCount,
+          'children': children,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      if (!mounted) return;
+      widget.onSignup({
+        'firstName': _firstNameController.text.trim(),
+        'lastName': _lastNameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'password': _passwordController.text,
+        'childrenCount': _childrenController.text.trim(),
+        'uid': user?.uid ?? '',
+      });
+      // Store credentials for biometric login
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('stored_email', _emailController.text.trim());
+      await prefs.setString('stored_password', _passwordController.text);
+    } on fb_auth.FirebaseAuthException catch (e) {
+      // If CONFIGURATION_NOT_FOUND or other Firebase config issue, fall back to local
+      if (e.code.contains('configuration') || 
+          e.message?.contains('CONFIGURATION_NOT_FOUND') == true ||
+          e.message?.contains('Google Play Services') == true) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Firebase services not available. Signed up locally. Install Google Play Services on device or check Firebase configuration.',
+            ),
+            duration: Duration(seconds: 4),
+          ),
+        );
+        if (!mounted) return;
+        widget.onSignup({
+          'firstName': _firstNameController.text.trim(),
+          'lastName': _lastNameController.text.trim(),
+          'email': _emailController.text.trim(),
+          'password': _passwordController.text,
+          'childrenCount': _childrenController.text.trim(),
+          'uid': '',
+        });
+        // Store credentials for biometric login
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('stored_email', _emailController.text.trim());
+        await prefs.setString('stored_password', _passwordController.text);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sign up failed: ${e.message}')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sign up failed: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: Center(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 20),
-                
-                // Logo Section
-                Column(
-                  children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: AppTheme.blue100,
-                        borderRadius: BorderRadius.circular(24),
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.slate50.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.security,
+                          size: 40,
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.security,
-                        color: AppTheme.blue600,
-                        size: 40,
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Join The Guard',
+                        style: AppTheme.headingLarge,
+                        textAlign: TextAlign.center,
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Join EVEGuard',
-                      style: AppTheme.headingLarge,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Create your secure account',
-                      style: AppTheme.bodyMedium,
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Create your secure account',
+                        style: AppTheme.bodyMedium,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
-                
+
                 const SizedBox(height: 32),
-                
+
                 // Signup Form
                 Container(
                   padding: const EdgeInsets.all(24),
@@ -135,7 +231,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 24),
-                      
+
                       // Name Fields Row
                       Row(
                         children: [
@@ -163,7 +259,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      
+
                       // Email Field
                       TextField(
                         controller: _emailController,
@@ -177,7 +273,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      
+
                       // Password Field
                       TextField(
                         controller: _passwordController,
@@ -202,7 +298,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      
+
                       // Confirm Password Field
                       TextField(
                         controller: _confirmPasswordController,
@@ -226,8 +322,22 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 16),
+
+                      // Number of Children
+                      TextField(
+                        controller: _childrenController,
+                        keyboardType: TextInputType.number,
+                        decoration: AppTheme.inputDecoration(
+                          hintText: 'Number of children (optional)',
+                          prefixIcon: const Icon(
+                            Icons.child_care_outlined,
+                            color: AppTheme.slate500,
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 20),
-                      
+
                       // Terms Agreement
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -246,9 +356,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                 text: const TextSpan(
                                   style: AppTheme.bodySmall,
                                   children: [
-                                    TextSpan(
-                                      text: 'I agree to the ',
-                                    ),
+                                    TextSpan(text: 'I agree to the '),
                                     TextSpan(
                                       text: 'Terms of Service',
                                       style: TextStyle(
@@ -256,9 +364,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                    TextSpan(
-                                      text: ' and ',
-                                    ),
+                                    TextSpan(text: ' and '),
                                     TextSpan(
                                       text: 'Privacy Policy',
                                       style: TextStyle(
@@ -274,12 +380,12 @@ class _SignupScreenState extends State<SignupScreen> {
                         ],
                       ),
                       const SizedBox(height: 24),
-                      
+
                       // Sign Up Button
                       ElevatedButton(
                         onPressed: _isLoading ? null : _handleSignup,
                         style: AppTheme.primaryButtonStyle.copyWith(
-                          minimumSize: MaterialStateProperty.all(
+                          minimumSize: WidgetStateProperty.all(
                             const Size(double.infinity, 48),
                           ),
                         ),
@@ -299,9 +405,9 @@ class _SignupScreenState extends State<SignupScreen> {
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 24),
-                
+
                 // Sign In Link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -322,7 +428,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 20),
               ],
             ),
