@@ -5,13 +5,27 @@ import 'package:http/http.dart' as http;
 /// API Service for The Guard backend
 class ApiService {
   // Modal deployment endpoint - UPDATE THIS AFTER DEPLOYMENT
-  static const String baseUrl = 'https://modal.com/apps/yousef-ahmed9904/main/deployed/eveguard-backend';
+  static const String baseUrl = 'https://geminiai340--eveguard-backend-fastapi-app.modal.run';
   
   /// Transcribe audio and analyze for threats
   /// Returns full analysis including transcription, danger score, and detected words
+  /// Automatically warms up the server before making the request
   static Future<TranscriptionResult> transcribeAndAnalyze(File audioFile) async {
+    // First, warm up the server (wake up Modal if cold)
+    bool serverReady = await warmupServer();
+    if (!serverReady) {
+      throw Exception(
+        'Server is not responding. The Modal function may be starting up. '
+        'Please try again in a few seconds. If the problem persists, check your internet connection.'
+      );
+    }
+    
     try {
-      var uri = Uri.parse('$baseUrl/transcribe');
+      // Ensure baseUrl doesn't have trailing slash
+      String cleanBaseUrl = baseUrl.endsWith('/') 
+          ? baseUrl.substring(0, baseUrl.length - 1) 
+          : baseUrl;
+      var uri = Uri.parse('$cleanBaseUrl/transcribe');
       var request = http.MultipartRequest('POST', uri);
       
       request.files.add(
@@ -19,7 +33,7 @@ class ApiService {
       );
       
       var streamedResponse = await request.send().timeout(
-        const Duration(seconds: 120),
+        const Duration(seconds: 180), // Increased timeout for cold starts + transcription
       );
       var response = await http.Response.fromStream(streamedResponse);
       
@@ -27,30 +41,116 @@ class ApiService {
         var data = json.decode(response.body);
         return TranscriptionResult.fromJson(data);
       } else {
-        throw Exception('Transcription failed: ${response.body}');
+        throw Exception('Transcription failed (${response.statusCode}): ${response.body}');
       }
+    } on http.ClientException catch (e) {
+      throw Exception('Network error: ${e.message}. Please check your internet connection.');
+    } on FormatException catch (e) {
+      throw Exception('Invalid response from server: $e');
     } catch (e) {
+      if (e.toString().contains('TimeoutException') || e.toString().contains('timeout')) {
+        throw Exception(
+          'Request timed out. The server may be starting up (cold start) or processing the audio. '
+          'Please try again - subsequent requests should be faster.'
+        );
+      }
       throw Exception('Failed to transcribe audio: $e');
     }
   }
   
+  /// Warm up the server (wake up Modal function if cold)
+  /// Returns true if server is ready, false otherwise
+  static Future<bool> warmupServer({int maxRetries = 3}) async {
+    // Ensure baseUrl doesn't have trailing slash
+    String cleanBaseUrl = baseUrl.endsWith('/') 
+        ? baseUrl.substring(0, baseUrl.length - 1) 
+        : baseUrl;
+    
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        var response = await http.get(Uri.parse('$cleanBaseUrl/')).timeout(
+          const Duration(seconds: 30), // Longer timeout for cold starts
+        );
+        if (response.statusCode == 200) {
+          return true;
+        }
+      } catch (e) {
+        if (attempt < maxRetries) {
+          // Wait a bit before retrying
+          await Future.delayed(Duration(seconds: attempt * 2));
+          continue;
+        }
+        return false;
+      }
+    }
+    return false;
+  }
+  
   /// Analyze text for threats (no audio)
+  /// Automatically warms up the server before making the request
   static Future<TextAnalysisResult> analyzeText(String text) async {
+    // First, warm up the server (wake up Modal if cold)
+    bool serverReady = await warmupServer();
+    if (!serverReady) {
+      throw Exception(
+        'Server is not responding. The Modal function may be starting up. '
+        'Please try again in a few seconds. If the problem persists, check your internet connection.'
+      );
+    }
+    
     try {
-      var uri = Uri.parse('$baseUrl/analyze-text');
+      // Ensure baseUrl doesn't have trailing slash
+      String cleanBaseUrl = baseUrl.endsWith('/') 
+          ? baseUrl.substring(0, baseUrl.length - 1) 
+          : baseUrl;
+      var uri = Uri.parse('$cleanBaseUrl/analyze-text');
+      
       var response = await http.post(
         uri,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
         body: json.encode({'text': text}),
-      ).timeout(const Duration(seconds: 30));
+      ).timeout(const Duration(seconds: 60)); // Increased timeout for cold starts
       
       if (response.statusCode == 200) {
         var data = json.decode(response.body);
         return TextAnalysisResult.fromJson(data);
+      } else if (response.statusCode == 405) {
+        // Method Not Allowed - try to parse error message
+        try {
+          var errorData = json.decode(response.body);
+          String errorMsg = errorData['error']?['message'] ?? errorData['message'] ?? response.body;
+          throw Exception('Method Not Allowed: $errorMsg. Please check the API endpoint configuration.');
+        } catch (_) {
+          throw Exception('Method Not Allowed (405): The server rejected the request. Please check the API endpoint.');
+        }
       } else {
-        throw Exception('Analysis failed: ${response.body}');
+        // Try to parse error response
+        try {
+          var errorData = json.decode(response.body);
+          String errorMsg = errorData['error']?['message'] ?? errorData['message'] ?? response.body;
+          throw Exception('Analysis failed (${response.statusCode}): $errorMsg');
+        } catch (_) {
+          throw Exception('Analysis failed (${response.statusCode}): ${response.body}');
+        }
       }
+    } on http.ClientException catch (e) {
+      throw Exception('Network error: ${e.message}. Please check your internet connection.');
+    } on FormatException catch (e) {
+      throw Exception('Invalid response from server: $e');
     } catch (e) {
+      if (e.toString().contains('TimeoutException') || e.toString().contains('timeout')) {
+        throw Exception(
+          'Request timed out. The server may be starting up (cold start). '
+          'Please try again - subsequent requests should be faster.'
+        );
+      }
+      // Re-throw if it's already our formatted exception
+      if (e.toString().startsWith('Exception: ')) {
+        rethrow;
+      }
       throw Exception('Failed to analyze text: $e');
     }
   }
@@ -58,8 +158,12 @@ class ApiService {
   /// Check if the API is available
   static Future<bool> checkHealth() async {
     try {
-      var response = await http.get(Uri.parse('$baseUrl/')).timeout(
-        const Duration(seconds: 10),
+      // Ensure baseUrl doesn't have trailing slash
+      String cleanBaseUrl = baseUrl.endsWith('/') 
+          ? baseUrl.substring(0, baseUrl.length - 1) 
+          : baseUrl;
+      var response = await http.get(Uri.parse('$cleanBaseUrl/')).timeout(
+        const Duration(seconds: 30), // Increased timeout for cold starts
       );
       return response.statusCode == 200;
     } catch (e) {

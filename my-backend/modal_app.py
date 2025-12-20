@@ -267,9 +267,8 @@ image = (
         "librosa==0.10.2",
         "soundfile==0.12.1",
         "accelerate==1.2.1",
-            "fastapi==0.115.0",
+        "fastapi==0.115.0",
         "python-multipart==0.0.9",
-            "httpx==0.24.1",
         "sentencepiece==0.2.0",  # Required for MARBERT
     )
     .env({"HF_HUB_CACHE": MODEL_DIR})
@@ -280,7 +279,7 @@ model_cache = modal.Volume.from_name("whisper-model-cache", create_if_missing=Tr
 # Deploy the FastAPI app
 @app.function(
     image=image,
-    gpu="H100",
+    gpu="A10G",
     volumes={MODEL_DIR: model_cache},
     cpu=2,
     memory=16384,
@@ -288,21 +287,14 @@ model_cache = modal.Volume.from_name("whisper-model-cache", create_if_missing=Tr
 )
 @modal.asgi_app()
 def fastapi_app():
-    from fastapi import FastAPI, File, UploadFile, HTTPException, Header, WebSocket, WebSocketDisconnect
+    from fastapi import FastAPI, File, UploadFile, HTTPException, Header
     from fastapi.middleware.cors import CORSMiddleware
     from pydantic import BaseModel
     import tempfile
     import os
     import base64
     import torch
-    import librosa
-    import numpy as np
     from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
-    import json
-    import logging
-    import asyncio
-    import traceback
-    import httpx
     
     api = FastAPI(title="EVE-Guard API", version="2.0")
     
@@ -322,12 +314,10 @@ def fastapi_app():
         def __init__(self):
             self.pipeline = None
             self.sentiment_classifier = None
-            self.pipeline_loaded = False
-            self.classifier_loaded = False
         
         def get_pipeline(self):
             if self.pipeline is None:
-                logging.info("Loading Whisper Medium model (GPU)...")
+                print("Loading Whisper Medium model (GPU)...")
                 processor = AutoProcessor.from_pretrained(MODEL_NAME)
                 model = AutoModelForSpeechSeq2Seq.from_pretrained(
                     MODEL_NAME,
@@ -344,76 +334,21 @@ def fastapi_app():
                     torch_dtype=torch.float16,
                     device="cuda",
                 )
-                self.pipeline_loaded = True
-                logging.info("Whisper pipeline loaded successfully")
+                print("Model loaded successfully!")
             return self.pipeline
         
         def get_sentiment_classifier(self):
             if self.sentiment_classifier is None:
-                logging.info("Loading MARBERT hate speech classifier...")
+                print("Loading MARBERT hate speech classifier...")
                 self.sentiment_classifier = pipeline(
                     "text-classification",
                     model=MARBERT_MODEL,
                     device="cuda"
                 )
-                self.classifier_loaded = True
-                logging.info("MARBERT classifier loaded successfully")
+                print("MARBERT classifier loaded successfully!")
             return self.sentiment_classifier
     
-    # Configure logging
-    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(asctime)s %(message)s")
-
     model_cache_instance = ModelCache()
-
-    # Configuration: parent tokens mapping and options
-    PARENT_TOKENS: Dict[str, str] = {}
-    PARENT_TOKENS_ENV = os.getenv("PARENT_TOKENS", "")
-    if PARENT_TOKENS_ENV:
-        try:
-            PARENT_TOKENS = json.loads(PARENT_TOKENS_ENV)
-        except Exception:
-            # Fallback simple format: parent1:token1,parent2:token2
-            for pair in PARENT_TOKENS_ENV.split(","):
-                if ":" in pair:
-                    pid, tok = pair.split(":", 1)
-                    PARENT_TOKENS[pid.strip()] = tok.strip()
-
-    ALLOW_ANONYMOUS = os.getenv("ALLOW_ANONYMOUS", "0") == "1"
-    PRELOAD_MODELS = os.getenv("PRELOAD_MODELS", "0") == "1"
-    
-    # Simple WebSocket-based publish-subscribe manager for parent devices
-    class ConnectionManager:
-        def __init__(self):
-            self.active_connections: Dict[str, WebSocket] = {}
-
-        async def connect(self, parent_id: str, websocket: WebSocket):
-            await websocket.accept()
-            self.active_connections[parent_id] = websocket
-
-        def disconnect(self, parent_id: str):
-            if parent_id in self.active_connections:
-                del self.active_connections[parent_id]
-
-        async def send_personal_message(self, message: dict, parent_id: str):
-            ws = self.active_connections.get(parent_id)
-            if ws:
-                try:
-                    await ws.send_json(message)
-                except Exception:
-                    # if send fails, remove connection
-                    self.disconnect(parent_id)
-
-        async def broadcast(self, message: dict):
-            for pid, ws in list(self.active_connections.items()):
-                try:
-                    await ws.send_json(message)
-                except Exception:
-                    self.disconnect(pid)
-
-    manager = ConnectionManager()
-
-    # ESP webhook URL (should be set as environment variable on Modal or runtime)
-    ESP_URL = os.getenv("ESP_URL", "")
     
     def transcribe_audio_file(audio_path: str) -> str:
         pipe = model_cache_instance.get_pipeline()
@@ -438,118 +373,9 @@ def fastapi_app():
             "is_hate": is_hate,
             "confidence": score if is_hate else 1 - score
         }
-
-    def analyze_emotion(audio_path: str) -> dict:
-        """
-        Lightweight audio-based emotion/distress heuristic using librosa.
-        This is a heuristic fallback (no large EMO model) that estimates
-        whether the audio sounds like crying, shouting/angry, sad/low-energy
-        or neutral. Returns label, confidence and a small feature dump.
-        """
-        try:
-            y, sr = librosa.load(audio_path, sr=16000, mono=True)
-        except Exception as e:
-            print(f"[EMOTION] Failed to load audio for emotion analysis: {e}")
-            return {"label": "unknown", "confidence": 0.0, "features": {}}
-
-        # Short-circuit empty audio
-        if y.size == 0:
-            return {"label": "silence", "confidence": 1.0, "features": {"duration": 0.0}}
-
-        # Features
-        rms = librosa.feature.rms(y=y)[0]
-        rms_mean = float(np.mean(rms))
-        zcr = float(np.mean(librosa.feature.zero_crossing_rate(y)[0]))
-
-        # Fundamental frequency estimation (may produce NaNs)
-        try:
-            f0 = librosa.yin(y, fmin=50, fmax=2000, sr=sr, frame_length=2048)
-            f0 = f0[~np.isnan(f0)]
-            pitch_median = float(np.median(f0)) if f0.size > 0 else 0.0
-            pitch_std = float(np.std(f0)) if f0.size > 0 else 0.0
-        except Exception:
-            pitch_median = 0.0
-            pitch_std = 0.0
-
-        duration = float(len(y) / sr)
-
-        # Heuristic rules (tuned conservatively)
-        # Crying: relatively high energy + high pitch variability
-        if (rms_mean > 0.03 and pitch_std > 60) or (rms_mean > 0.05 and zcr > 0.12):
-            label = "crying"
-            # confidence increases with energy and pitch variability
-            conf = min(0.99, 0.3 + (rms_mean * 6) + (min(pitch_std / 200, 0.6)))
-        # Angry/shouting: high energy, moderate pitch variance
-        elif rms_mean > 0.04 and pitch_std > 20:
-            label = "angry/shouting"
-            conf = min(0.95, 0.25 + (rms_mean * 5) + (min(pitch_std / 150, 0.5)))
-        # Sad/low-energy: low energy and low pitch
-        elif rms_mean < 0.008 and pitch_median < 160:
-            label = "sad/low_energy"
-            conf = min(0.9, 0.2 + (0.008 - rms_mean) * 50)
-        else:
-            label = "neutral"
-            conf = min(0.9, 0.2 + (1.0 - min(1.0, rms_mean * 20)))
-
-        features = {
-            "rms_mean": rms_mean,
-            "zcr": zcr,
-            "pitch_median": pitch_median,
-            "pitch_std": pitch_std,
-            "duration": duration,
-        }
-
-        # Suggest a simple textual response to the parent if distress detected
-        suggested_response = None
-        if label == "crying":
-            suggested_response = "The child sounds like they are crying and distressed. Please check on them right away."
-        elif label == "angry/shouting":
-            suggested_response = "The audio sounds like shouting or anger. Consider checking the situation."
-        elif label == "sad/low_energy":
-            suggested_response = "The child sounds sad or low-energy. Please check on them and offer comfort."
-
-        return {"label": label, "confidence": round(float(conf), 3), "features": features, "suggested_response": suggested_response}
     
-    def verify_token(token: str, parent_id: str = None) -> bool:
-        """Verify token. If `PARENT_TOKENS` is configured, require match for parent_id.
-        If no tokens configured, allow when `ALLOW_ANONYMOUS` is true."""
-        if not token:
-            return False if not ALLOW_ANONYMOUS else True
-
-        # Strip Bearer if present
-        if token.startswith("Bearer "):
-            token = token.replace("Bearer ", "", 1)
-
-        if PARENT_TOKENS:
-            if parent_id:
-                expected = PARENT_TOKENS.get(parent_id)
-                return expected == token
-            # If no parent specified, accept any known token
-            return token in set(PARENT_TOKENS.values())
-
-        return True if ALLOW_ANONYMOUS else False
-
-    @api.get("/health")
-    async def health():
-        return {"status": "ok"}
-
-    @api.get("/ready")
-    async def ready():
-        ready_state = model_cache_instance.pipeline_loaded and model_cache_instance.classifier_loaded
-        return {"ready": bool(ready_state)}
-
-    @api.on_event("startup")
-    async def startup_event():
-        logging.info("EVE-Guard API starting up")
-        if PRELOAD_MODELS:
-            # Preload models in executor to avoid blocking event loop
-            loop = asyncio.get_event_loop()
-            try:
-                await loop.run_in_executor(None, model_cache_instance.get_pipeline)
-                await loop.run_in_executor(None, model_cache_instance.get_sentiment_classifier)
-                logging.info("Preloaded models")
-            except Exception:
-                logging.exception("Failed to preload models")
+    def verify_token(token: str) -> bool:
+        return bool(token)
     
     @api.get("/")
     async def root():
@@ -569,8 +395,7 @@ def fastapi_app():
     @api.post("/transcribe")
     async def transcribe(
         file: UploadFile = File(...),
-        authorization: str = Header(None),
-        parent_id: str = Header(None, alias="X-Parent-Id")
+        authorization: str = Header(None)
     ):
         """
         Transcribe audio and analyze for threats.
@@ -578,8 +403,8 @@ def fastapi_app():
         """
         print(f"[LOG] Received file: {file.filename} (content_type={file.content_type})")
         
-        if authorization and not verify_token(authorization, parent_id):
-            logging.warning("Invalid token for parent_id=%s", parent_id)
+        if authorization and not verify_token(authorization.replace("Bearer ", "")):
+            print("[LOG] Invalid token")
             raise HTTPException(status_code=401, detail="Invalid token")
         
         allowed_extensions = ('.ogg', '.mp3', '.wav', '.m4a', '.flac')
@@ -608,10 +433,7 @@ def fastapi_app():
             
             # Analyze sentiment using MARBERT model
             sentiment_result = analyze_sentiment(text)
-
-            # Analyze audio emotion (heuristic)
-            emotion_result = analyze_emotion(temp_path)
-
+            
             # Combine scores
             sentiment_boost = 0.3 if sentiment_result["is_hate"] else 0.0
             combined_danger_score = min(1.0, keyword_danger_score + (sentiment_boost * sentiment_result["confidence"]))
@@ -622,8 +444,8 @@ def fastapi_app():
             
             # Encode audio as base64 for returning to client
             audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-
-            payload = {
+            
+            return {
                 "transcription": text,
                 "audio_base64": audio_base64,
                 "audio_format": suffix.replace(".", ""),
@@ -642,31 +464,9 @@ def fastapi_app():
                         "score": sentiment_result["score"],
                         "is_hate": sentiment_result["is_hate"],
                         "confidence": sentiment_result["confidence"]
-                    },
-                    "emotion_analysis": emotion_result
+                    }
                 }
             }
-
-            # Publish to parent if provided and connected
-            if parent_id:
-                try:
-                    await manager.send_personal_message(payload, parent_id)
-                except Exception:
-                    logging.exception("Failed to publish to parent %s", parent_id)
-
-            # If danger is above threshold, notify ESP to open camera/stream
-            try:
-                if danger_score >= 0.5 and ESP_URL:
-                    async with httpx.AsyncClient(timeout=10.0) as client:
-                        await client.post(ESP_URL, json={
-                            "action": "open_camera",
-                            "danger_score": danger_score,
-                            "parent_id": parent_id,
-                            "metadata": {"transcription": text[:200]}
-                        })
-            except Exception:
-                logging.exception("Failed to call ESP webhook")
-            return payload
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
@@ -752,129 +552,5 @@ def fastapi_app():
                 "Audio extraction and analysis"
             ]
         }
-
-    # ============================================
-    # ENDPOINT 4: Heart Rate Alert from ESP32
-    # ============================================
-    class HeartAlertRequest(BaseModel):
-        heart_rate: int
-        device_id: str = "unknown"
-        alert_type: str = "unknown"
-        timestamp: str = ""
-        parent_id: str = None
-    
-    @api.post("/heart-alert")
-    async def heart_alert(
-        request: HeartAlertRequest,
-        authorization: str = Header(None),
-        x_parent_id: str = Header(None, alias="X-Parent-Id")
-    ):
-        """
-        Receive heart rate alerts from ESP32.
-        When heart rate is critical (zero or abnormal), notify parent via WebSocket.
-        
-        Expected JSON body:
-        {
-            "heart_rate": 0,
-            "device_id": "esp32_001",
-            "alert_type": "critical",
-            "timestamp": "2025-12-20T10:30:00Z",
-            "parent_id": "parent_123"
-        }
-        """
-        logging.info(f"[HEART-ALERT] Received alert from ESP32: {request}")
-        
-        heart_rate = request.heart_rate
-        device_id = request.device_id
-        alert_type = request.alert_type
-        timestamp = request.timestamp
-        parent_id = x_parent_id or request.parent_id
-        
-        # Determine alert severity and message
-        if heart_rate == 0:
-            severity = "CRITICAL"
-            message = "⚠️ EMERGENCY: Heart rate sensor reading ZERO! Immediate attention required!"
-            risk_level = "danger"
-        elif heart_rate < 40:
-            severity = "WARNING"
-            message = f"⚠️ WARNING: Heart rate dangerously low ({heart_rate} BPM). Please check immediately."
-            risk_level = "warning"
-        elif heart_rate > 180:
-            severity = "WARNING"
-            message = f"⚠️ WARNING: Heart rate dangerously high ({heart_rate} BPM). Please check immediately."
-            risk_level = "warning"
-        elif heart_rate < 60:
-            severity = "LOW"
-            message = f"Heart rate is low ({heart_rate} BPM). Monitor closely."
-            risk_level = "suspicious"
-        elif heart_rate > 100:
-            severity = "HIGH"
-            message = f"Heart rate is elevated ({heart_rate} BPM). Monitor closely."
-            risk_level = "suspicious"
-        else:
-            severity = "NORMAL"
-            message = f"Heart rate is normal ({heart_rate} BPM)."
-            risk_level = "safe"
-        
-        # Build notification payload
-        notification_payload = {
-            "type": "heart_rate_alert",
-            "severity": severity,
-            "heart_rate": heart_rate,
-            "device_id": device_id,
-            "alert_type": alert_type,
-            "message": message,
-            "risk_level": risk_level,
-            "timestamp": timestamp,
-            "requires_action": severity in ["CRITICAL", "WARNING"]
-        }
-        
-        # Send notification to parent via WebSocket
-        if parent_id:
-            try:
-                await manager.send_personal_message(notification_payload, parent_id)
-                logging.info(f"[HEART-ALERT] Sent notification to parent {parent_id}")
-            except Exception as e:
-                logging.exception(f"Failed to notify parent {parent_id}: {e}")
-        else:
-            # Broadcast to all connected parents if no specific parent_id
-            try:
-                await manager.broadcast(notification_payload)
-                logging.info("[HEART-ALERT] Broadcast notification to all parents")
-            except Exception as e:
-                logging.exception(f"Failed to broadcast: {e}")
-        
-        # If critical, also trigger ESP camera
-        if severity == "CRITICAL" and ESP_URL:
-            try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    await client.post(ESP_URL, json={
-                        "action": "open_camera",
-                        "reason": "heart_rate_critical",
-                        "heart_rate": heart_rate,
-                        "parent_id": parent_id
-                    })
-                logging.info("[HEART-ALERT] Triggered ESP camera due to critical heart rate")
-            except Exception:
-                logging.exception("Failed to trigger ESP camera")
-        
-        return {
-            "status": "received",
-            "severity": severity,
-            "message": message,
-            "notification_sent": True,
-            "parent_id": parent_id
-        }
-
-    @api.websocket("/ws/parent/{parent_id}")
-    async def parent_ws(websocket: WebSocket, parent_id: str):
-        """WebSocket endpoint for parent devices to receive real-time messages."""
-        await manager.connect(parent_id, websocket)
-        try:
-            while True:
-                # Keep the connection alive; parent can send pings or commands
-                await websocket.receive_text()
-        except WebSocketDisconnect:
-            manager.disconnect(parent_id)
     
     return api

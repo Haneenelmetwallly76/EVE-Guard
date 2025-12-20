@@ -48,6 +48,16 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
     });
 
     try {
+      // Show a snackbar to inform user about warmup
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Waking up server... This may take a moment on first request.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
       final result = await ApiService.analyzeText(textValue);
       setState(() {
         _analysisResult = result;
@@ -55,9 +65,25 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString();
+        // Extract a more user-friendly error message
+        String errorMsg = e.toString();
+        if (errorMsg.contains('Exception: ')) {
+          errorMsg = errorMsg.replaceFirst('Exception: ', '');
+        }
+        _errorMessage = errorMsg;
         _isLoading = false;
       });
+      
+      // Show error in snackbar as well
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${_errorMessage ?? "Unknown error"}'),
+            backgroundColor: AppTheme.red600,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 
