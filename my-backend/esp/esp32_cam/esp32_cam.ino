@@ -2,11 +2,29 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
 
 // ---------- CONFIG - set your WiFi and API key here ----------
 const char* ssid = "YOUR_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 const char* API_KEY = "REPLACE_WITH_SECRET_KEY"; // shared secret with backend
+
+// Backend server URL for sending heart rate alerts
+const char* BACKEND_URL = "https://YOUR_MODAL_APP_URL/heart-alert";
+const char* PARENT_ID = "parent_001";  // Unique ID for the parent to receive notifications
+const char* DEVICE_ID = "esp32_001";   // Unique device identifier
+
+// Heart rate sensor pin (for pulse sensor or similar)
+#define HEART_SENSOR_PIN 33  // Analog pin for heart rate sensor
+
+// Heart rate monitoring variables
+volatile int heartRate = 0;
+unsigned long lastHeartBeatTime = 0;
+unsigned long lastAlertTime = 0;
+const unsigned long ALERT_COOLDOWN = 10000;  // 10 seconds between alerts
+const int CRITICAL_LOW_HR = 0;
+const int WARNING_LOW_HR = 40;
+const int WARNING_HIGH_HR = 180;
 
 // Port for the camera stream
 WebServer server(80);
@@ -172,6 +190,112 @@ void handleRoot(){
   server.send(200, "text/plain", s);
 }
 
+// --------- Heart Rate Monitoring Functions ---------
+
+// Read heart rate from sensor (simplified - adjust based on your actual sensor)
+int readHeartRate() {
+  // For a basic pulse sensor, read analog value
+  int sensorValue = analogRead(HEART_SENSOR_PIN);
+  
+  // Simple threshold detection for heartbeat
+  // You may need to adjust this based on your specific sensor
+  static int lastValue = 0;
+  static unsigned long lastBeatTime = 0;
+  static int beatCount = 0;
+  static unsigned long measureStartTime = 0;
+  
+  // Detect rising edge (heartbeat)
+  if (sensorValue > 2000 && lastValue <= 2000) {
+    unsigned long now = millis();
+    if (now - lastBeatTime > 300) {  // Debounce: min 300ms between beats
+      beatCount++;
+      lastBeatTime = now;
+    }
+  }
+  lastValue = sensorValue;
+  
+  // Calculate BPM every 10 seconds
+  unsigned long now = millis();
+  if (measureStartTime == 0) {
+    measureStartTime = now;
+  }
+  
+  if (now - measureStartTime >= 10000) {  // 10 second window
+    heartRate = beatCount * 6;  // Convert to BPM (beats per minute)
+    beatCount = 0;
+    measureStartTime = now;
+    Serial.printf("Heart Rate: %d BPM\n", heartRate);
+  }
+  
+  return heartRate;
+}
+
+// Send heart rate alert to backend server
+void sendHeartAlert(int hr, const char* alertType) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi not connected, cannot send alert");
+    return;
+  }
+  
+  // Check cooldown to avoid spamming
+  unsigned long now = millis();
+  if (now - lastAlertTime < ALERT_COOLDOWN) {
+    return;
+  }
+  lastAlertTime = now;
+  
+  HTTPClient http;
+  http.begin(BACKEND_URL);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-Parent-Id", PARENT_ID);
+  http.addHeader("x-api-key", API_KEY);
+  
+  // Create JSON payload
+  StaticJsonDocument<256> doc;
+  doc["heart_rate"] = hr;
+  doc["device_id"] = DEVICE_ID;
+  doc["alert_type"] = alertType;
+  doc["parent_id"] = PARENT_ID;
+  
+  // Add timestamp (simple format - you could use NTP for real time)
+  char timestamp[32];
+  snprintf(timestamp, sizeof(timestamp), "%lu", millis());
+  doc["timestamp"] = timestamp;
+  
+  String jsonPayload;
+  serializeJson(doc, jsonPayload);
+  
+  Serial.printf("Sending heart alert: %s\n", jsonPayload.c_str());
+  
+  int httpCode = http.POST(jsonPayload);
+  
+  if (httpCode > 0) {
+    Serial.printf("Heart alert sent, response code: %d\n", httpCode);
+    String response = http.getString();
+    Serial.println(response);
+  } else {
+    Serial.printf("Failed to send heart alert, error: %s\n", http.errorToString(httpCode).c_str());
+  }
+  
+  http.end();
+}
+
+// Check heart rate and send alerts if needed
+void checkHeartRateAndAlert() {
+  int hr = readHeartRate();
+  
+  if (hr == CRITICAL_LOW_HR) {
+    Serial.println("CRITICAL: Heart rate is ZERO!");
+    sendHeartAlert(hr, "critical");
+  } else if (hr < WARNING_LOW_HR && hr > 0) {
+    Serial.printf("WARNING: Heart rate too low: %d BPM\n", hr);
+    sendHeartAlert(hr, "warning_low");
+  } else if (hr > WARNING_HIGH_HR) {
+    Serial.printf("WARNING: Heart rate too high: %d BPM\n", hr);
+    sendHeartAlert(hr, "warning_high");
+  }
+}
+
 void setup(){
   Serial.begin(115200);
   Serial.setDebugOutput(true);
@@ -208,4 +332,11 @@ void setup(){
 
 void loop(){
   server.handleClient();
+  
+  // Check heart rate every loop iteration
+  // The readHeartRate function internally handles timing for BPM calculation
+  checkHeartRateAndAlert();
+  
+  // Small delay to prevent overwhelming the CPU
+  delay(10);
 }
