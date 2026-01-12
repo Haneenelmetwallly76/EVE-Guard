@@ -165,17 +165,17 @@ class _HomeScreenState extends State<HomeScreen>
                     child: Stack(
                       children: [
                         // Map background pattern
-                        Center(
+                        const Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.location_on,
                                 size: 64,
                                 color: Colors.white,
                               ),
-                              const SizedBox(height: 12),
-                              const Text(
+                              SizedBox(height: 12),
+                              Text(
                                 'Open Full Map',
                                 style: TextStyle(
                                   color: Colors.white,
@@ -183,8 +183,8 @@ class _HomeScreenState extends State<HomeScreen>
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              const Text(
+                              SizedBox(height: 4),
+                              Text(
                                 'Tap to view your location',
                                 style: TextStyle(
                                   color: Colors.white70,
@@ -222,15 +222,15 @@ class _HomeScreenState extends State<HomeScreen>
           const SizedBox(height: 24),
 
           // SOS Section
-          GlassCard(
+          const GlassCard(
             child: Column(
               children: [
-                const Text(
+                Text(
                   'Device Status',
                   style: AppTheme.headingMedium,
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
               ],
             ),
           ),

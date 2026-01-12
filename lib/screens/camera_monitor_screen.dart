@@ -259,7 +259,7 @@ class _CameraMonitorScreenState extends State<CameraMonitorScreen> {
                       ? null
                       : (_isConnected ? _disconnect : _connectToCamera),
                   style: AppTheme.primaryButtonStyle.copyWith(
-                    minimumSize: MaterialStateProperty.all(
+                    minimumSize: WidgetStateProperty.all(
                       const Size(double.infinity, 48),
                     ),
                   ),
@@ -359,10 +359,10 @@ class _CameraMonitorScreenState extends State<CameraMonitorScreen> {
                       width: 1,
                     ),
                   ),
-                  child: Column(
+                  child: const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'ESP32 Setup Guide',
                         style: TextStyle(
                           fontSize: 14,
@@ -370,8 +370,8 @@ class _CameraMonitorScreenState extends State<CameraMonitorScreen> {
                           color: AppTheme.indigo600,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      const Text(
+                      SizedBox(height: 8),
+                      Text(
                         '1. Connect ESP32 to WiFi\n'
                         '2. Note the IP address (e.g., 192.168.1.100)\n'
                         '3. Use port 81 for RTSP stream\n'

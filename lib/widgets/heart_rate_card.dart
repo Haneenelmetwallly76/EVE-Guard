@@ -16,7 +16,7 @@ class _HeartRateCardState extends State<HeartRateCard>
   int _currentHeartRate = 0;
   bool _isMonitoring = true;
   Timer? _heartbeatTimer;
-  List<int> _heartRateHistory = [];
+  final List<int> _heartRateHistory = [];
 
   @override
   void initState() {
@@ -248,7 +248,7 @@ class _HeartRateCardState extends State<HeartRateCard>
                   children: List.generate(
                     _heartRateHistory.length,
                     (index) {
-                      final maxRate = 120.0;
+                      const maxRate = 120.0;
                       final height = (_heartRateHistory[index] / maxRate) * 40;
                       return Flexible(
                         child: Tooltip(

@@ -66,7 +66,7 @@ class StatusBadge extends StatelessWidget {
               color: textColor,
             ),
             const SizedBox(width: 4),
-          ],
+          ],    
           if (showPulse) ...[
             Container(
               width: 6,

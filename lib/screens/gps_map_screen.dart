@@ -206,7 +206,7 @@ class _GPSMapScreenState extends State<GPSMapScreen> {
                         ),
                       )
                     else
-                      Icon(
+                      const Icon(
                         Icons.location_off_outlined,
                         size: 80,
                         color: AppTheme.slate300,

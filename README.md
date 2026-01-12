@@ -1,12 +1,68 @@
-## Getting Started
+# 🛡️ The Guard - Advanced Personal Safety System
 
-This project is a starting point for a Flutter application.
+**The Guard** is a professional-grade mobile application built with **Flutter** and **Firebase**. It provides real-time protection and emergency response tools, featuring biometric security and enterprise-level encryption.
 
-A few resources to get you started if this is your first Flutter project:
+---
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## 📸 App Preview
+<p align="center">
+  <img src="assets/images/logo.png" width="150" alt="The Guard Logo">
+</p>
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### Screenshots
+
+<p align="center">
+  <img src="screenshots/all_screens.png" width="700" alt="All Screens Preview">
+</p>
+
+<table>
+  <tr>
+    <td align="center">
+      <b>Login Screen</b><br/>
+      <img src="screenshots/login.png" width="200" alt="Login Screen">
+    </td>
+    <td align="center">
+      <b>Home Dashboard</b><br/>
+      <img src="screenshots/home.png" width="200" alt="Home Dashboard">
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <b>GPS Location</b><br/>
+      <img src="screenshots/gps.png" width="200" alt="GPS Location">
+    </td>
+    <td align="center">
+      <b>User Profile</b><br/>
+      <img src="screenshots/profile.png" width="200" alt="User Profile">
+    </td>
+  </tr>
+</table>
+
+---
+
+## ✨ Key Features
+- **Biometric Authentication:** Secure access using Face ID and Fingerprint integration.
+- **Real-time SOS Alerts:** Instant notification to emergency contacts with live GPS coordinates.
+- **Enterprise-Level Security:** Built with bank-level encryption standards for user data protection.
+- **Cloud Integration:** Real-time data synchronization using Firebase Firestore and Auth.
+
+---
+
+## 🚀 Tech Stack
+- **Frontend:** Flutter & Dart
+- **State Management:** (e.g., Provider/Bloc)
+- **Backend:** Firebase (Auth, Firestore, Cloud Functions)
+- **Security:** local_auth for Biometrics
+- **Storage:** Shared Preferences for local persistence
+
+---
+
+## 🏗️ Architecture
+This project implements **Clean Architecture** and follows the **MVVM** pattern, ensuring the codebase is scalable, maintainable, and testable.
+
+---
+
+## 🛠️ How to Run
+1. Clone the repository: `git clone https://github.com/Haneenelmetwallly76/EVE-Guard.git`
+2. Get dependencies: `flutter pub get`
+3. Run the app: `flutter run`
